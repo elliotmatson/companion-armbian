@@ -10,3 +10,6 @@ This repo uses Github Actions to build Armbian, and then install Companion. It t
  3. Click `Run Workflow`, and select your board and version of Companion (e.g. `4.3.4`, or `stable` for the latest release).
  4. Run the workflow
 After the workflow completes, navigate to the `Summary` tab of that execution, and your image file will be attached as `armbian-<board>-companion-<version>.zip`
+
+## Automatic releases
+`companion-version.txt` pins the Companion release that gets built into the images, and Renovate keeps it up to date. Whenever it changes on `main`, the `Build Select Boards on Companion Update via Renovate` workflow builds images for a few Orange Pi boards and publishes them as a GitHub release.

@@ -1,0 +1,78 @@
+name: Build Select Boards on Companion Update via Renovate
+
+# Triggered when Renovate bumps companion-version.txt to a new Companion release.
+# Builds Armbian images for a selected set of boards with that Companion version included, then generates a release with the new images attached.
+# Runs on push to main (rather than on PR merge) so that branch-automerged updates, which have no PR, also produce a release.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - companion-version.txt
+  workflow_dispatch:
+
+jobs:
+  get-companion-version:
+    runs-on: ubuntu-latest
+    outputs:
+      companion_version: ${{ steps.get-version.outputs.companion_version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Get Companion Version from companion-version.txt, including leading 'v'
+        id: get-version
+        run: |
+          version="$(tr -d '[:space:]' < companion-version.txt)"
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Unexpected Companion version in companion-version.txt: '$version'"
+            exit 1
+          fi
+          echo "companion_version=$version" >> $GITHUB_OUTPUT
+
+  build-matrix:
+    needs: get-companion-version
+    strategy:
+      fail-fast: false
+      matrix:
+        # arm64 boards only: packer's arm-image builder and the Companion installer don't support 32-bit (armhf)
+        armbian-board:
+          - orangepizero2
+          - orangepizero2w
+          - orangepizero3
+    uses: ./.github/workflows/armbian-builder.yaml
+    secrets: inherit
+    with:
+      armbian-board: ${{ matrix.armbian-board }}
+      companion-build: ${{ needs.get-companion-version.outputs.companion_version }}
+
+  build-release:
+    needs:
+      - get-companion-version
+      - build-matrix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Built Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: "armbian-*"
+          merge-multiple: true
+          path: ./artifacts
+
+      - name: Create Release
+        id: create-release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: "companion-update-${{ needs.get-companion-version.outputs.companion_version }}"
+          commit: ${{ github.sha }}
+          name: "Companion Update ${{ needs.get-companion-version.outputs.companion_version }}"
+          artifacts: ./artifacts/*
+          generateReleaseNotes: true
+          allowUpdates: true
+          replacesArtifacts: true
