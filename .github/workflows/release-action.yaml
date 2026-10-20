@@ -59,7 +59,7 @@ jobs:
       contents: write
     env:
       COMPANION_VERSION: ${{ needs.get-companion-version.outputs.companion_version }}
-      ARMBIAN_REF: ${{ needs.build-matrix.outputs.armbian-ref }}
+      ARMBIAN_COMMIT: ${{ needs.build-matrix.outputs.armbian-commit }}
     steps:
       - name: Download Built Artifacts
         uses: actions/download-artifact@v7
@@ -73,7 +73,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           {
-            echo "Armbian (Ubuntu Noble, minimal) images with [Companion $COMPANION_VERSION](https://github.com/bitfocus/companion/releases/tag/$COMPANION_VERSION) preinstalled, built from [armbian/build $ARMBIAN_REF](https://github.com/armbian/build/releases/tag/$ARMBIAN_REF)."
+            echo "Armbian (Ubuntu Noble, minimal) images with [Companion $COMPANION_VERSION](https://github.com/bitfocus/companion/releases/tag/$COMPANION_VERSION) preinstalled, built from armbian/build [${ARMBIAN_COMMIT::7}](https://github.com/armbian/build/commit/$ARMBIAN_COMMIT)."
             echo
             echo "Flash the \`.img.xz\` for your board with balenaEtcher or Raspberry Pi Imager. Companion's web UI is on port 8000."
             echo

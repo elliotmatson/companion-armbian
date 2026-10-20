@@ -17,7 +17,7 @@ This repo uses Github Actions to build Armbian, and then install Companion. It t
 After the workflow completes, navigate to the `Summary` tab of that execution, and your image will be attached as `armbian-<board>-companion-<version>.zip`, containing an `.img.xz`.
 
 ## How it works
-`.github/workflows/build-image.yaml` builds a minimal Ubuntu Noble Armbian image for the chosen board from a pinned [armbian/build](https://github.com/armbian/build) release, then uses packer to run the [companion-pi](https://github.com/bitfocus/companion-pi) installer inside it. The same workflow is used by [companion-satellite-armbian](https://github.com/elliotmatson/companion-satellite-armbian).
+`.github/workflows/build-image.yaml` builds a minimal Ubuntu Noble Armbian image for the chosen board from the current [armbian/build](https://github.com/armbian/build) `main` (the exact commit is listed in each release), then uses packer to run the [companion-pi](https://github.com/bitfocus/companion-pi) installer inside it. The same workflow is used by [companion-satellite-armbian](https://github.com/elliotmatson/companion-satellite-armbian).
 
 ## Automatic releases
-`companion-version.txt` pins the Companion release that gets built into the images, and Renovate keeps it (and the pinned Armbian release) up to date. Whenever it changes on `main`, the `Build Select Boards on Companion Update via Renovate` workflow builds images for a few Orange Pi boards and publishes them as a GitHub release, with Companion's release notes.
+`companion-version.txt` pins the Companion release that gets built into the images, and Renovate keeps it up to date. Whenever it changes on `main`, the `Build Select Boards on Companion Update via Renovate` workflow builds images for a few Orange Pi boards and publishes them as a GitHub release, with Companion's release notes.

@@ -34,24 +34,26 @@ on:
         required: true
         type: string
 
+      # Armbian's release tags can't be rebuilt from source later: kernels track moving
+      # stable branches, so old tags' patches stop applying. main also reuses Armbian's
+      # prebuilt kernels. The exact commit used is reported in armbian-commit.
       armbian-ref:
-        description: armbian/build tag to build from
+        description: armbian/build branch or tag to build from
         required: false
         type: string
-        # renovate: datasource=github-tags depName=armbian/build
-        default: "v26.5.1"
+        default: "main"
 
     outputs:
-      armbian-ref:
-        description: armbian/build tag the image was built from
-        value: ${{ jobs.build.outputs.armbian-ref }}
+      armbian-commit:
+        description: armbian/build commit the image was built from
+        value: ${{ jobs.build.outputs.armbian-commit }}
 
 jobs:
   build:
     runs-on: ubuntu-latest
     name: Build Armbian
     outputs:
-      armbian-ref: ${{ inputs.armbian-ref }}
+      armbian-commit: ${{ steps.armbian.outputs.commit }}
     env:
       ARMBIAN_BOARD: ${{ inputs.armbian-board }}
       ARMBIAN_REF: ${{ inputs.armbian-ref }}
@@ -69,8 +71,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qemu-user-static zerofree
 
       - name: Build Armbian
+        id: armbian
         run: |
           git clone --depth=1 --branch="$ARMBIAN_REF" https://github.com/armbian/build
+          echo "commit=$(git -C build rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           ./build/compile.sh build \
           BOARD="$ARMBIAN_BOARD" \
           BRANCH=current \
