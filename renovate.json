@@ -1,6 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended"],
+  "extends": [
+    "config:recommended"
+  ],
   "git-submodules": {
     "enabled": true
   },
@@ -8,16 +10,34 @@
     {
       "customType": "regex",
       "description": "Companion release built into the images; a change on main triggers release-action.yaml",
-      "managerFilePatterns": ["/^companion-version\\.txt$/"],
-      "matchStrings": ["^(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*$"],
+      "managerFilePatterns": [
+        "/^companion-version\\.txt$/"
+      ],
+      "matchStrings": [
+        "^(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s*$"
+      ],
       "depNameTemplate": "companion",
       "packageNameTemplate": "bitfocus/companion",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Versions annotated with a `# renovate:` comment in workflows, e.g. the pinned armbian/build release",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)\\s+[\\w-]+:\\s*[\"']?(?<currentValue>[^\\s\"']+)"
+      ]
     }
   ],
   "packageRules": [
     {
-      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "matchUpdateTypes": [
+        "patch",
+        "pin",
+        "digest"
+      ],
       "automerge": true,
       "automergeType": "branch"
     }
