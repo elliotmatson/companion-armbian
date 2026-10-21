@@ -22,7 +22,7 @@ jobs:
       companion_version: ${{ steps.get-version.outputs.companion_version }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Get Companion Version from companion-version.txt, including leading 'v'
         id: get-version
