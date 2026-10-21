@@ -1,0 +1,147 @@
+name: Build Armbian image with packer
+
+# Shared by companion-armbian and companion-satellite-armbian. Called with the caller's
+# repository checked out, so packer-template and its submodules come from the caller.
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+    inputs:
+      armbian-board:
+        required: true
+        type: string
+
+      packer-template:
+        description: Packer template in the calling repository, e.g. companion.pkr.hcl
+        required: true
+        type: string
+
+      packer-image:
+        description: Image file the template writes, e.g. output-companion/armbian-companion.img
+        required: true
+        type: string
+
+      packer-vars:
+        description: Extra space-separated packer -var assignments, e.g. "build=v4.3.4"
+        required: false
+        type: string
+        default: ""
+
+      artifact-name:
+        description: Artifact name, and the released file name before .img.xz
+        required: true
+        type: string
+
+      # Armbian's release tags can't be rebuilt from source later: kernels track moving
+      # stable branches, so old tags' patches stop applying. main also reuses Armbian's
+      # prebuilt kernels. The exact commit used is reported in armbian-commit.
+      armbian-ref:
+        description: armbian/build branch or tag to build from
+        required: false
+        type: string
+        default: "main"
+
+    outputs:
+      armbian-commit:
+        description: armbian/build commit the image was built from
+        value: ${{ jobs.build.outputs.armbian-commit }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Build Armbian
+    outputs:
+      armbian-commit: ${{ steps.armbian.outputs.commit }}
+    env:
+      ARMBIAN_BOARD: ${{ inputs.armbian-board }}
+      ARMBIAN_REF: ${{ inputs.armbian-ref }}
+      PACKER_TEMPLATE: ${{ inputs.packer-template }}
+      PACKER_IMAGE: ${{ inputs.packer-image }}
+      PACKER_VARS: ${{ inputs.packer-vars }}
+      ARTIFACT_NAME: ${{ inputs.artifact-name }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+        with:
+          submodules: "true"
+
+      - name: Install qemu-user-static
+        run: sudo apt-get update && sudo apt-get install -y qemu-user-static zerofree
+
+      - name: Build Armbian
+        id: armbian
+        run: |
+          git clone --depth=1 --branch="$ARMBIAN_REF" https://github.com/armbian/build
+          echo "commit=$(git -C build rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          ./build/compile.sh build \
+          BOARD="$ARMBIAN_BOARD" \
+          BRANCH=current \
+          RELEASE=noble \
+          BUILD_MINIMAL=yes \
+          KERNEL_CONFIGURE=no
+
+      - name: rename file
+        run: |
+          mv build/output/images/*.img build/output/images/armbian.img
+
+      # Some boards (e.g. Raspberry Pi) have a separate boot partition. packer's arm-image
+      # source needs one mount point per partition, so read them from the image's fstab.
+      - name: Detect partition mount points
+        id: partitions
+        shell: bash
+        run: |
+          device="$(sudo losetup --partscan --show --find build/output/images/armbian.img)"
+          trap 'sudo umount rootfs 2>/dev/null; sudo losetup --detach "$device"' EXIT
+          mapfile -t parts < <(lsblk -lnpo NAME,TYPE "$device" | awk '$2=="part"{print $1}' | sort -V)
+          root="${parts[-1]}"
+          mkdir -p rootfs
+          sudo mount -o ro "$root" rootfs
+          mounts=()
+          for part in "${parts[@]::${#parts[@]}-1}"; do
+            uuid="$(sudo blkid -s UUID -o value "$part")"
+            mounts+=("$(awk -v u="UUID=$uuid" '$1==u {print $2}' rootfs/etc/fstab)")
+          done
+          mounts+=("/")
+          json="$(printf '%s\n' "${mounts[@]}" | jq -R . | jq -sc .)"
+          echo "Partitions: ${parts[*]} -> $json"
+          echo "image_mounts=$json" >> "$GITHUB_OUTPUT"
+
+      - name: install packer
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update && sudo apt-get install -y packer
+
+      - name: build image
+        shell: bash
+        run: |
+          vars=(-var "url=build/output/images/armbian.img" -var "image_mounts=$IMAGE_MOUNTS")
+          read -ra extra <<< "$PACKER_VARS"
+          for v in "${extra[@]}"; do vars+=(-var "$v"); done
+          sudo packer init "$PACKER_TEMPLATE"
+          sudo packer build "${vars[@]}" "$PACKER_TEMPLATE"
+        env:
+          IMAGE_MOUNTS: ${{ steps.partitions.outputs.image_mounts }}
+          PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: compress image
+        shell: bash
+        run: |
+          device="$(sudo losetup --partscan --show --find "$PACKER_IMAGE")"
+          root="$(lsblk -lnpo NAME,TYPE "$device" | awk '$2=="part"{print $1}' | sort -V | tail -n1)"
+          if [[ "$(sudo blkid -s TYPE -o value "$root")" == ext* ]]; then
+            sudo zerofree "$root"
+          fi
+          sudo losetup --detach "$device"
+
+          sudo xz -T0 -6 "$PACKER_IMAGE"
+          sudo mv "$PACKER_IMAGE.xz" "$ARTIFACT_NAME.img.xz"
+          ls -lh "$ARTIFACT_NAME.img.xz"
+
+      - name: Upload Armbian image
+        uses: actions/upload-artifact@v7
+        with:
+          name: armbian-${{ inputs.artifact-name }}
+          path: ${{ inputs.artifact-name }}.img.xz
