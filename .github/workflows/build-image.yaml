@@ -43,6 +43,12 @@ on:
         type: string
         default: "main"
 
+      armbian-release:
+        description: Armbian userspace release, e.g. resolute (Ubuntu 26.04) or noble (24.04)
+        required: false
+        type: string
+        default: "resolute"
+
       retention-days:
         description: Days to keep the uploaded image artifact (0 = repository default)
         required: false
@@ -63,6 +69,7 @@ jobs:
     env:
       ARMBIAN_BOARD: ${{ inputs.armbian-board }}
       ARMBIAN_REF: ${{ inputs.armbian-ref }}
+      ARMBIAN_RELEASE: ${{ inputs.armbian-release }}
       PACKER_TEMPLATE: ${{ inputs.packer-template }}
       PACKER_IMAGE: ${{ inputs.packer-image }}
       PACKER_VARS: ${{ inputs.packer-vars }}
@@ -73,8 +80,25 @@ jobs:
         with:
           submodules: "true"
 
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static zerofree
+      # Ubuntu 26.04 dropped the qemu-user-static package: qemu-user is statically linked
+      # and qemu-user-binfmt registers it. packer's arm-image source still looks for
+      # qemu-aarch64-static and copies it into the image, so it must be a static binary.
+      - name: Install qemu and zerofree
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zerofree
+          if apt-cache show qemu-user-static 2>/dev/null | grep -q '^Filename:'; then
+            sudo apt-get install -y qemu-user-static
+          else
+            sudo apt-get install -y qemu-user-binfmt
+          fi
+          qemu="$(command -v qemu-aarch64-static || command -v qemu-aarch64)"
+          if ! file -L "$qemu" | grep -q 'statically linked'; then
+            echo "::error::$qemu is not statically linked, packer can't use it inside the image"
+            exit 1
+          fi
+          [ "$(basename "$qemu")" = qemu-aarch64-static ] || sudo ln -sf "$qemu" /usr/local/bin/qemu-aarch64-static
+          qemu-aarch64-static --version | head -n1
 
       - name: Build Armbian
         id: armbian
@@ -84,7 +108,7 @@ jobs:
           ./build/compile.sh build \
           BOARD="$ARMBIAN_BOARD" \
           BRANCH=current \
-          RELEASE=noble \
+          RELEASE="$ARMBIAN_RELEASE" \
           BUILD_MINIMAL=yes \
           KERNEL_CONFIGURE=no
 
