@@ -43,6 +43,18 @@ on:
         type: string
         default: "main"
 
+      armbian-release:
+        description: Armbian userspace release, e.g. resolute (Ubuntu 26.04) or noble (24.04)
+        required: false
+        type: string
+        default: "resolute"
+
+      runner:
+        description: Runner to build on (ubuntu-24.04-arm, or ubuntu-24.04 for x86 through qemu)
+        required: false
+        type: string
+        default: "ubuntu-24.04-arm"
+
       retention-days:
         description: Days to keep the uploaded image artifact (0 = repository default)
         required: false
@@ -56,13 +68,18 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # arm64 runners provision the arm64 image natively: about 30 seconds instead of ~15
+    # minutes through qemu. On x86, the runner's qemu must also be newer than the image's
+    # userspace: Ubuntu 24.04's qemu 8.2 fails 26.04's tar ("Function not implemented"),
+    # and on 26.04 runners qemu-user-static is only a virtual package.
+    runs-on: ${{ inputs.runner }}
     name: Build Armbian
     outputs:
       armbian-commit: ${{ steps.armbian.outputs.commit }}
     env:
       ARMBIAN_BOARD: ${{ inputs.armbian-board }}
       ARMBIAN_REF: ${{ inputs.armbian-ref }}
+      ARMBIAN_RELEASE: ${{ inputs.armbian-release }}
       PACKER_TEMPLATE: ${{ inputs.packer-template }}
       PACKER_IMAGE: ${{ inputs.packer-image }}
       PACKER_VARS: ${{ inputs.packer-vars }}
@@ -73,8 +90,11 @@ jobs:
         with:
           submodules: "true"
 
-      - name: Install qemu-user-static
-        run: sudo apt-get update && sudo apt-get install -y qemu-user-static zerofree
+      # packer's arm-image source looks up qemu-aarch64-static even when it builds natively
+      - name: Install qemu and zerofree
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static zerofree
 
       - name: Build Armbian
         id: armbian
@@ -84,7 +104,7 @@ jobs:
           ./build/compile.sh build \
           BOARD="$ARMBIAN_BOARD" \
           BRANCH=current \
-          RELEASE=noble \
+          RELEASE="$ARMBIAN_RELEASE" \
           BUILD_MINIMAL=yes \
           KERNEL_CONFIGURE=no
 
@@ -117,7 +137,7 @@ jobs:
       - name: install packer
         run: |
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt-get update && sudo apt-get install -y packer
 
       - name: build image
