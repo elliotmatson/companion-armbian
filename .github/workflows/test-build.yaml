@@ -1,0 +1,39 @@
+name: Test build
+
+# Builds one board for every branch Renovate pushes. Renovate only automerges an update
+# (and so triggers a release) once this check passes; if it fails, Renovate opens a PR instead.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - "renovate/**"
+  workflow_dispatch:
+
+concurrency:
+  group: test-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  get-companion-version:
+    runs-on: ubuntu-latest
+    outputs:
+      companion_version: ${{ steps.get-version.outputs.companion_version }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Get Companion Version from companion-version.txt
+        id: get-version
+        run: echo "companion_version=$(tr -d '[:space:]' < companion-version.txt)" >> $GITHUB_OUTPUT
+
+  build:
+    needs: get-companion-version
+    uses: ./.github/workflows/armbian-builder.yaml
+    secrets: inherit
+    with:
+      armbian-board: orangepizero3
+      companion-build: ${{ needs.get-companion-version.outputs.companion_version }}
+      retention-days: 1

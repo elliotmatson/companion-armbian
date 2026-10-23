@@ -43,6 +43,12 @@ on:
         type: string
         default: "main"
 
+      retention-days:
+        description: Days to keep the uploaded image artifact (0 = repository default)
+        required: false
+        type: number
+        default: 0
+
     outputs:
       armbian-commit:
         description: armbian/build commit the image was built from
@@ -145,3 +151,4 @@ jobs:
         with:
           name: armbian-${{ inputs.artifact-name }}
           path: ${{ inputs.artifact-name }}.img.xz
+          retention-days: ${{ inputs.retention-days }}
