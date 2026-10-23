@@ -23,7 +23,7 @@ on:
       runner:
         required: false
         type: string
-        default: "ubuntu-24.04"
+        default: "ubuntu-24.04-arm"
 
     outputs:
       armbian-commit:
@@ -40,11 +40,11 @@ on:
 
       runner:
         type: choice
-        description: 'Runner (arm64 runs the image setup natively instead of through qemu)'
-        default: 'ubuntu-24.04'
+        description: 'Runner (x86 emulates the image setup through qemu, much slower)'
+        default: 'ubuntu-24.04-arm'
         options:
-          - ubuntu-24.04
           - ubuntu-24.04-arm
+          - ubuntu-24.04
 
       armbian-board:
         type: choice
@@ -367,7 +367,7 @@ jobs:
     with:
       armbian-board: ${{ inputs.armbian-board }}
       retention-days: ${{ inputs.retention-days || 0 }}
-      runner: ${{ inputs.runner || 'ubuntu-24.04' }}
+      runner: ${{ inputs.runner || 'ubuntu-24.04-arm' }}
       packer-template: companion.pkr.hcl
       packer-image: output-companion/armbian-companion.img
       packer-vars: build=${{ inputs.companion-build }}

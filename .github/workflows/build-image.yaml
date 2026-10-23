@@ -50,10 +50,10 @@ on:
         default: "resolute"
 
       runner:
-        description: Runner to build on; an arm64 runner (ubuntu-24.04-arm) runs packer natively instead of through qemu
+        description: Runner to build on (ubuntu-24.04-arm, or ubuntu-24.04 for x86 through qemu)
         required: false
         type: string
-        default: "ubuntu-24.04"
+        default: "ubuntu-24.04-arm"
 
       retention-days:
         description: Days to keep the uploaded image artifact (0 = repository default)
@@ -68,9 +68,10 @@ on:
 
 jobs:
   build:
-    # The runner, not the image: on Ubuntu 26.04 runners qemu-user-static is only a virtual
-    # package, so the qemu install below fails there. The image is still built from
-    # armbian-release.
+    # arm64 runners provision the arm64 image natively: about 30 seconds instead of ~15
+    # minutes through qemu. On x86, the runner's qemu must also be newer than the image's
+    # userspace: Ubuntu 24.04's qemu 8.2 fails 26.04's tar ("Function not implemented"),
+    # and on 26.04 runners qemu-user-static is only a virtual package.
     runs-on: ${{ inputs.runner }}
     name: Build Armbian
     outputs:
