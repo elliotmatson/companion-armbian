@@ -20,6 +20,11 @@ on:
         type: number
         default: 0
 
+      runner:
+        required: false
+        type: string
+        default: "ubuntu-24.04"
+
     outputs:
       armbian-commit:
         description: armbian/build commit the image was built from
@@ -32,6 +37,14 @@ on:
         description: Companion Version (e.g. 4.3.4, or "stable" / "beta" for the latest)
         default: 'stable'
         required: true
+
+      runner:
+        type: choice
+        description: 'Runner (arm64 runs the image setup natively instead of through qemu)'
+        default: 'ubuntu-24.04'
+        options:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
 
       armbian-board:
         type: choice
@@ -354,6 +367,7 @@ jobs:
     with:
       armbian-board: ${{ inputs.armbian-board }}
       retention-days: ${{ inputs.retention-days || 0 }}
+      runner: ${{ inputs.runner || 'ubuntu-24.04' }}
       packer-template: companion.pkr.hcl
       packer-image: output-companion/armbian-companion.img
       packer-vars: build=${{ inputs.companion-build }}

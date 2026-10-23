@@ -49,6 +49,12 @@ on:
         type: string
         default: "resolute"
 
+      runner:
+        description: Runner to build on; an arm64 runner (ubuntu-24.04-arm) runs packer natively instead of through qemu
+        required: false
+        type: string
+        default: "ubuntu-24.04"
+
       retention-days:
         description: Days to keep the uploaded image artifact (0 = repository default)
         required: false
@@ -62,11 +68,10 @@ on:
 
 jobs:
   build:
-    # The runner, not the image: Ubuntu 26.04 runners have no static qemu-aarch64 (its
-    # qemu-user is dynamically linked), and packer's arm-image source copies qemu into
-    # the image's chroot, where only a static binary can run. The image is still built
-    # from armbian-release.
-    runs-on: ubuntu-24.04
+    # The runner, not the image: on Ubuntu 26.04 runners qemu-user-static is only a virtual
+    # package, so the qemu install below fails there. The image is still built from
+    # armbian-release.
+    runs-on: ${{ inputs.runner }}
     name: Build Armbian
     outputs:
       armbian-commit: ${{ steps.armbian.outputs.commit }}
@@ -84,6 +89,7 @@ jobs:
         with:
           submodules: "true"
 
+      # packer's arm-image source looks up qemu-aarch64-static even when it builds natively
       - name: Install qemu and zerofree
         run: |
           sudo apt-get update
@@ -130,7 +136,7 @@ jobs:
       - name: install packer
         run: |
           curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-          echo "deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt-get update && sudo apt-get install -y packer
 
       - name: build image
