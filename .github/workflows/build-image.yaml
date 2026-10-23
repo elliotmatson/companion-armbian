@@ -50,10 +50,10 @@ on:
         default: "resolute"
 
       runner:
-        description: Runner to build on (ubuntu-24.04-arm, or ubuntu-24.04 for x86 through qemu)
+        description: Runner to build on (arm64 runners need no emulation; x86 goes through qemu)
         required: false
         type: string
-        default: "ubuntu-24.04-arm"
+        default: "ubuntu-26.04-arm"
 
       retention-days:
         description: Days to keep the uploaded image artifact (0 = repository default)
@@ -70,8 +70,7 @@ jobs:
   build:
     # arm64 runners provision the arm64 image natively: about 30 seconds instead of ~15
     # minutes through qemu. On x86, the runner's qemu must also be newer than the image's
-    # userspace: Ubuntu 24.04's qemu 8.2 fails 26.04's tar ("Function not implemented"),
-    # and on 26.04 runners qemu-user-static is only a virtual package.
+    # userspace: Ubuntu 24.04's qemu 8.2 fails 26.04's tar ("Function not implemented").
     runs-on: ${{ inputs.runner }}
     name: Build Armbian
     outputs:
@@ -90,11 +89,18 @@ jobs:
         with:
           submodules: "true"
 
-      # packer's arm-image source looks up qemu-aarch64-static even when it builds natively
+      # From Ubuntu 26.04, qemu-user-static is only a virtual package: qemu-user (pulled in
+      # by qemu-user-binfmt) has the static binaries, without the -static suffix. packer's
+      # arm-image source still looks up qemu-aarch64-static, even when it builds natively.
       - name: Install qemu and zerofree
         run: |
           sudo apt-get update
-          sudo apt-get install -y qemu-user-static zerofree
+          sudo apt-get install -y zerofree
+          sudo apt-get install -y qemu-user-static || sudo apt-get install -y qemu-user-binfmt
+          if ! command -v qemu-aarch64-static >/dev/null; then
+            sudo ln -s "$(command -v qemu-aarch64)" /usr/local/bin/qemu-aarch64-static
+          fi
+          qemu-aarch64-static --version | head -n1
 
       - name: Build Armbian
         id: armbian
